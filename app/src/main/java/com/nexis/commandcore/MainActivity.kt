@@ -20,6 +20,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,10 +57,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -122,7 +123,7 @@ private fun NexisTheme(content: @Composable () -> Unit) {
         onBackground = Color(0xFFEDE7FF),
         onSurface = Color(0xFFEDE7FF)
     )
-    MaterialTheme(colorScheme = scheme, typography = MaterialTheme.typography, content = content)
+    MaterialTheme(colorScheme = scheme, content = content)
 }
 
 @Composable
@@ -135,7 +136,6 @@ private fun NexisApp(
     var tab by remember { mutableStateOf("Core") }
     var input by remember { mutableStateOf("") }
     var coach by remember { mutableStateOf(NexisBrain.coach("Build Nexis", entries.size)) }
-    val context = LocalContext.current
 
     val saveCapture: (String) -> Unit = { text ->
         val trimmed = text.trim()
@@ -164,25 +164,30 @@ private fun NexisApp(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Header(entries.size, onStartOverlay, onRequestOverlay)
                 TabRow(tab) { tab = it }
-                when (tab) {
-                    "Core" -> CoreScreen(coach, entries, onVoice = {
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Tell Nexis what to remember or build.")
-                        }
-                        voiceLauncher.launch(intent)
-                    })
-                    "Capture" -> CaptureScreen(input, { input = it }, saveCapture, coach)
-                    "Vault" -> VaultScreen(entries, onDelete = { id -> entries = store.remove(id) }, onClear = { entries = store.clear() })
-                    "Build" -> BuildLabScreen()
+
+                Box(modifier = Modifier.weight(1f)) {
+                    when (tab) {
+                        "Core" -> CoreScreen(coach, entries, onVoice = {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Tell Nexis what to remember or build.")
+                            }
+                            voiceLauncher.launch(intent)
+                        })
+                        "Chat" -> ConversationScreen(entries = entries, onSaveCapture = saveCapture)
+                        "Capture" -> CaptureScreen(input, { input = it }, saveCapture, coach)
+                        "Vault" -> VaultScreen(entries, onDelete = { id -> entries = store.remove(id) }, onClear = { entries = store.clear() })
+                        "Build" -> BuildLabScreen()
+                        "Providers" -> ProviderBridgeScreen()
+                    }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
-                    text = "Local-first. Review-only. No Accessibility Service. No screenshots. No auto-running code.",
+                    "Local-first. Review-only. No Accessibility Service. No screenshots. No auto-running code.",
                     color = Color(0xFFB9AEE8),
                     fontSize = 12.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -194,11 +199,7 @@ private fun NexisApp(
 
 @Composable
 private fun Header(vaultSize: Int, onStartOverlay: () -> Unit, onRequestOverlay: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Column {
             Text("NEXIS", fontSize = 34.sp, fontWeight = FontWeight.Black, color = Color.White)
             Text("Command Core · $vaultSize saved sparks", color = Color(0xFF00E5FF), fontSize = 13.sp)
@@ -212,16 +213,21 @@ private fun Header(vaultSize: Int, onStartOverlay: () -> Unit, onRequestOverlay:
 
 @Composable
 private fun TabRow(selected: String, onSelect: (String) -> Unit) {
-    val tabs = listOf("Core", "Capture", "Vault", "Build")
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val tabs = listOf("Core", "Chat", "Capture", "Vault", "Build", "Providers")
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         tabs.forEach { tab ->
             val active = tab == selected
             TextButton(
                 onClick = { onSelect(tab) },
                 modifier = Modifier
-                    .weight(1f)
                     .border(1.dp, if (active) Color(0xFF00E5FF) else Color(0x337C4DFF), RoundedCornerShape(18.dp))
                     .background(if (active) Color(0x2215E4FF) else Color(0x11111025), RoundedCornerShape(18.dp))
+                    .padding(horizontal = 4.dp)
             ) {
                 Text(tab, color = if (active) Color.White else Color(0xFFB9AEE8), fontSize = 13.sp)
             }
@@ -253,13 +259,8 @@ private fun CoreScreen(coach: NexisCoachResponse, entries: List<NexisMemoryEntry
         }
         item {
             GlassCard {
-                Text("What Nexis is built to solve", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "You do not need another blank notes app. You need a living command center that catches the wild ideas, keeps code changes safe, turns stress into one next action, and makes the phone feel like it has a soul.",
-                    color = Color(0xFFD9D2FF),
-                    fontSize = 14.sp
-                )
+                Text("New feature stack", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("Chat Core · Provider Bridge · Build Doctor · Premium Avatar · Vault Export Preview", color = Color(0xFFD9D2FF), fontSize = 14.sp)
             }
         }
     }
@@ -267,30 +268,18 @@ private fun CoreScreen(coach: NexisCoachResponse, entries: List<NexisMemoryEntry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CaptureScreen(
-    input: String,
-    onInput: (String) -> Unit,
-    onSave: (String) -> Unit,
-    coach: NexisCoachResponse
-) {
+private fun CaptureScreen(input: String, onInput: (String) -> Unit, onSave: (String) -> Unit, coach: NexisCoachResponse) {
     Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         GlassCard {
             Text("Capture anything", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text("Ideas, code, app fixes, worries, wins, plans. Nexis classifies it and gives the next move.", color = Color(0xFFB9AEE8), fontSize = 13.sp)
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = input,
-                onValueChange = onInput,
-                label = { Text("Tell Nexis") },
-                minLines = 6,
-                modifier = Modifier.fillMaxWidth()
-            )
+            OutlinedTextField(value = input, onValueChange = onInput, label = { Text("Tell Nexis") }, minLines = 6, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
             GlowButton("Save to Nexis") { onSave(input) }
         }
         GlassCard {
             Text("Latest read", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
             Text(coach.headline, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text(coach.nextStep, color = Color(0xFFD9D2FF), fontSize = 14.sp)
         }
@@ -299,6 +288,8 @@ private fun CaptureScreen(
 
 @Composable
 private fun VaultScreen(entries: List<NexisMemoryEntry>, onDelete: (Long) -> Unit, onClear: () -> Unit) {
+    var exportPreview by remember { mutableStateOf("") }
+
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -306,9 +297,21 @@ private fun VaultScreen(entries: List<NexisMemoryEntry>, onDelete: (Long) -> Uni
                 TextButton(onClick = onClear) { Text("Clear", color = Color(0xFFFF8A80)) }
             }
         }
-        items(entries, key = { it.id }) { entry ->
-            MemoryCard(entry, onDelete)
+        item {
+            GlassCard {
+                Text("Vault Export Preview", color = Color(0xFFFFD166), fontWeight = FontWeight.Black, fontSize = 18.sp)
+                Text("Create a plain-text export preview of saved sparks. No file permission needed in this pass.", color = Color(0xFFD9D2FF), fontSize = 13.sp)
+                GlowButton("Generate preview") {
+                    exportPreview = entries.joinToString("\n\n") {
+                        "[${it.type.label}] ${it.title}\n${it.body}\n${formatDate(it.createdAt)}"
+                    }.ifBlank { "Vault is empty." }
+                }
+                if (exportPreview.isNotBlank()) {
+                    Text(exportPreview.take(1800), color = Color(0xFFEDE7FF), fontSize = 12.sp)
+                }
+            }
         }
+        items(entries, key = { it.id }) { entry -> MemoryCard(entry, onDelete) }
     }
 }
 
@@ -317,12 +320,27 @@ private fun BuildLabScreen() {
     Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         GlassCard {
             Text("Build Lab", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-            Text("This is where code ideas belong before they touch the repo. Nexis treats every upgrade as review-first.", color = Color(0xFFD9D2FF), fontSize = 14.sp)
+            Text("Paste code, app ideas, crash logs, or upgrade plans here before they touch the repo.", color = Color(0xFFD9D2FF), fontSize = 14.sp)
         }
-        BuildRule("1", "Paste code", "Save the file path, purpose, and expected behavior. Do not run code from chat inside the app.")
-        BuildRule("2", "Patch repo", "Apply changes in GitHub/Codespace or Android Studio where the diff can be reviewed.")
-        BuildRule("3", "Build APK", "Run gradle :app:assembleDebug or trigger the included GitHub Actions workflow.")
-        BuildRule("4", "Connect AI safely", "Provider keys are user-owned, never hardcoded. No hidden network calls in this starter build.")
+
+        BuildRule("1", "Chat → Plan", "Use Chat Core to turn ideas into exact file targets and build steps.")
+        BuildRule("2", "Plan → Patch", "Apply the smallest safe change in Codespace.")
+        BuildRule("3", "Patch → Build", "Run gradle :app:assembleDebug --stacktrace.")
+        BuildRule("4", "Build → Artifact", "Find app-debug.apk in app/build/outputs/apk/debug.")
+        BuildRule("5", "Artifact → Install", "Only install APKs built from reviewed code.")
+
+        GlassCard {
+            Text("Build Doctor", color = Color(0xFF00E5FF), fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text("If build fails, run:", color = Color(0xFFD9D2FF))
+            Text("gradle :app:assembleDebug --stacktrace 2>&1 | tee build.log", color = Color(0xFFFFD166), fontSize = 12.sp)
+            Text("Then inspect the first 'What went wrong' block. Fix the first real error, not the last stacktrace line.", color = Color(0xFFB9AEE8), fontSize = 13.sp)
+        }
+
+        GlassCard {
+            Text("Provider Bridge Rules", color = Color(0xFFFFD166), fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text("GPT · Gemini · Claude · Grok · Local Mock", color = Color(0xFFEDE7FF))
+            Text("User-owned keys only. No hardcoded secrets. No automatic repo patching. No runtime code execution.", color = Color(0xFFB9AEE8), fontSize = 13.sp)
+        }
     }
 }
 
@@ -330,13 +348,9 @@ private fun BuildLabScreen() {
 private fun BuildRule(number: String, title: String, body: String) {
     GlassCard {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .background(Color(0x337C4DFF), CircleShape)
-                    .border(1.dp, Color(0xFF00E5FF), CircleShape),
-                contentAlignment = Alignment.Center
-            ) { Text(number, color = Color.White, fontWeight = FontWeight.Bold) }
+            Box(modifier = Modifier.size(38.dp).background(Color(0x337C4DFF), CircleShape).border(1.dp, Color(0xFF00E5FF), CircleShape), contentAlignment = Alignment.Center) {
+                Text(number, color = Color.White, fontWeight = FontWeight.Bold)
+            }
             Column {
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(body, color = Color(0xFFB9AEE8), fontSize = 13.sp)
@@ -350,13 +364,7 @@ private fun MemoryCard(entry: NexisMemoryEntry, onDelete: (Long) -> Unit) {
     GlassCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(entry.type.label.uppercase(), color = Color(0xFF00E5FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    if (entry.pinned) {
-                        Spacer(Modifier.width(8.dp))
-                        Text("PINNED", color = Color(0xFFFFD166), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
+                Text(entry.type.label.uppercase(), color = Color(0xFF00E5FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text(entry.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(entry.body, color = Color(0xFFD9D2FF), maxLines = 4, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                 Text(formatDate(entry.createdAt), color = Color(0xFF8B82B8), fontSize = 11.sp)
@@ -368,11 +376,7 @@ private fun MemoryCard(entry: NexisMemoryEntry, onDelete: (Long) -> Unit) {
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color(0x66111025)),
-        shape = RoundedCornerShape(20.dp)
-    ) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = Color(0x66111025)), shape = RoundedCornerShape(20.dp)) {
         Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, maxLines = 1)
             Text(label, color = Color(0xFFB9AEE8), fontSize = 12.sp)
@@ -383,36 +387,26 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 @Composable
 private fun GlassCard(content: @Composable () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color(0x337C4DFF), RoundedCornerShape(24.dp)),
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0x337C4DFF), RoundedCornerShape(24.dp)),
         colors = CardDefaults.cardColors(containerColor = Color(0xAA111025)),
         shape = RoundedCornerShape(24.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { content() }
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) { content() }
     }
 }
 
 @Composable
 private fun GlowButton(label: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C4DFF), contentColor = Color.White),
-        shape = RoundedCornerShape(18.dp)
-    ) { Text(label, fontWeight = FontWeight.Bold) }
+    Button(onClick = onClick, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C4DFF), contentColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+        Text(label, fontWeight = FontWeight.Bold)
+    }
 }
 
 @Composable
 private fun NexisBackground() {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        drawRect(
-            Brush.radialGradient(
-                colors = listOf(Color(0x553A145F), Color(0xFF080713)),
-                center = Offset(size.width * 0.5f, size.height * 0.18f),
-                radius = size.maxDimension * 0.75f
-            )
-        )
-        for (i in 0 until 24) {
+        drawRect(Brush.radialGradient(listOf(Color(0x553A145F), Color(0xFF080713)), center = Offset(size.width * 0.5f, size.height * 0.18f), radius = size.maxDimension * 0.75f))
+        for (i in 0 until 32) {
             val x = size.width * ((i * 37 % 100) / 100f)
             val y = size.height * ((i * 61 % 100) / 100f)
             drawCircle(Color(0x334DDCFF), radius = 1.5f + (i % 4), center = Offset(x, y))
@@ -422,56 +416,55 @@ private fun NexisBackground() {
 
 @Composable
 private fun AnimatedNexisAvatar() {
-    val transition = rememberInfiniteTransition(label = "nexis")
-    val pulse by transition.animateFloat(
-        initialValue = 0.88f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(tween(1600), RepeatMode.Reverse),
-        label = "pulse"
-    )
-    val orbit by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = (PI * 2).toFloat(),
-        animationSpec = infiniteRepeatable(tween(5600), RepeatMode.Restart),
-        label = "orbit"
-    )
+    val transition = rememberInfiniteTransition(label = "premiumNexis")
+    val pulse by transition.animateFloat(0.88f, 1.13f, infiniteRepeatable(tween(1500), RepeatMode.Reverse), label = "pulse")
+    val orbit by transition.animateFloat(0f, (PI * 2).toFloat(), infiniteRepeatable(tween(5200), RepeatMode.Restart), label = "orbit")
+    val blink by transition.animateFloat(1f, 0.12f, infiniteRepeatable(tween(2100), RepeatMode.Reverse), label = "blink")
 
-    Canvas(modifier = Modifier.size(236.dp)) {
+    Canvas(modifier = Modifier.size(260.dp)) {
         val c = Offset(size.width / 2f, size.height / 2f)
-        val r = min(size.width, size.height) * 0.23f * pulse
-        drawCircle(
-            brush = Brush.radialGradient(listOf(Color(0x8800E5FF), Color.Transparent), center = c, radius = r * 3.0f),
-            radius = r * 2.8f,
-            center = c
-        )
-        drawCircle(Color(0x447C4DFF), radius = r * 1.8f, center = c, style = Stroke(width = 4.dp.toPx()))
-        drawCircle(Color(0x66FF4FD8), radius = r * 2.15f, center = c, style = Stroke(width = 2.dp.toPx()))
-        repeat(12) { i ->
-            val angle = orbit + i * (PI.toFloat() * 2f / 12f)
-            val orbitRadius = r * (1.7f + (i % 3) * 0.19f)
-            val dot = Offset(c.x + cos(angle) * orbitRadius, c.y + sin(angle) * orbitRadius)
-            drawCircle(if (i % 2 == 0) Color(0xFF00E5FF) else Color(0xFFFF4FD8), radius = 3.dp.toPx() + i % 3, center = dot)
+        val base = min(size.width, size.height) * 0.22f
+        val r = base * pulse
+
+        drawCircle(Brush.radialGradient(listOf(Color(0x6600E5FF), Color(0x334F2DFF), Color.Transparent), c, r * 3.6f), r * 3.35f, c)
+
+        drawOval(Color(0x224DDCFF), Offset(c.x - r * 2.45f, c.y - r * 0.82f), Size(r * 1.95f, r * 1.65f))
+        drawOval(Color(0x22FF4FD8), Offset(c.x + r * 0.50f, c.y - r * 0.82f), Size(r * 1.95f, r * 1.65f))
+
+        repeat(3) { ring ->
+            drawCircle(listOf(Color(0x887C4DFF), Color(0x8800E5FF), Color(0x66FF4FD8))[ring], r * (1.45f + ring * 0.34f), c, style = Stroke(width = (3 - ring).dp.toPx()))
         }
-        drawCircle(
-            brush = Brush.radialGradient(listOf(Color(0xFFEDE7FF), Color(0xFF7C4DFF), Color(0xFF140B30)), center = Offset(c.x - r * 0.3f, c.y - r * 0.4f), radius = r * 1.35f),
-            radius = r,
-            center = c
-        )
+
+        repeat(18) { i ->
+            val angle = orbit * if (i % 2 == 0) 1f else -1f + i * (PI.toFloat() * 2f / 18f)
+            val orbitRadius = r * (1.72f + (i % 4) * 0.13f)
+            val dot = Offset(c.x + cos(angle) * orbitRadius, c.y + sin(angle) * orbitRadius)
+            drawCircle(if (i % 3 == 0) Color(0xFFFFD166) else if (i % 2 == 0) Color(0xFF00E5FF) else Color(0xFFFF4FD8), (2.3f + (i % 3)).dp.toPx(), dot)
+        }
+
+        drawOval(Color(0x55000000), Offset(c.x - r * 0.85f, c.y + r * 1.20f), Size(r * 1.70f, r * 0.32f))
+
+        drawCircle(Brush.radialGradient(listOf(Color.White, Color(0xFFEDE7FF), Color(0xFF7C4DFF), Color(0xFF120A2B)), Offset(c.x - r * 0.32f, c.y - r * 0.45f), r * 1.45f), r, c)
+
+        drawCircle(Color(0xAAFFFFFF), r * 0.18f, Offset(c.x - r * 0.35f, c.y - r * 0.45f))
+
         val eyeY = c.y - r * 0.15f
-        val eyeX = r * 0.32f
-        drawCircle(Color.White, radius = r * 0.12f, center = Offset(c.x - eyeX, eyeY))
-        drawCircle(Color.White, radius = r * 0.12f, center = Offset(c.x + eyeX, eyeY))
-        drawCircle(Color(0xFF080713), radius = r * 0.055f, center = Offset(c.x - eyeX, eyeY))
-        drawCircle(Color(0xFF080713), radius = r * 0.055f, center = Offset(c.x + eyeX, eyeY))
-        drawArc(
-            color = Color(0xFFFFD166),
-            startAngle = 10f,
-            sweepAngle = 160f,
-            useCenter = false,
-            topLeft = Offset(c.x - r * 0.35f, c.y + r * 0.16f),
-            size = androidx.compose.ui.geometry.Size(r * 0.7f, r * 0.38f),
-            style = Stroke(width = 3.dp.toPx())
-        )
+        val eyeDx = r * 0.34f
+        val eyeOpen = (r * 0.13f * blink).coerceAtLeast(2f)
+
+        drawOval(Color.White, Offset(c.x - eyeDx - r * 0.13f, eyeY - eyeOpen), Size(r * 0.26f, eyeOpen * 2f))
+        drawOval(Color.White, Offset(c.x + eyeDx - r * 0.13f, eyeY - eyeOpen), Size(r * 0.26f, eyeOpen * 2f))
+        drawCircle(Color(0xFF080713), r * 0.055f, Offset(c.x - eyeDx, eyeY))
+        drawCircle(Color(0xFF080713), r * 0.055f, Offset(c.x + eyeDx, eyeY))
+        drawCircle(Color(0xFF00E5FF), r * 0.022f, Offset(c.x - eyeDx + r * 0.025f, eyeY - r * 0.025f))
+        drawCircle(Color(0xFF00E5FF), r * 0.022f, Offset(c.x + eyeDx + r * 0.025f, eyeY - r * 0.025f))
+
+        drawArc(Color(0xFFFFD166), 18f, 144f + (pulse - 1f) * 70f, false, Offset(c.x - r * 0.34f, c.y + r * 0.16f), Size(r * 0.68f, r * 0.38f), style = Stroke(width = 3.dp.toPx()))
+
+        drawLine(Color(0xFFFFD166), Offset(c.x - r * 0.36f, c.y - r * 0.98f), Offset(c.x - r * 0.18f, c.y - r * 1.30f), strokeWidth = 3.dp.toPx())
+        drawLine(Color(0xFFFFD166), Offset(c.x, c.y - r * 1.03f), Offset(c.x, c.y - r * 1.42f), strokeWidth = 3.dp.toPx())
+        drawLine(Color(0xFFFFD166), Offset(c.x + r * 0.36f, c.y - r * 0.98f), Offset(c.x + r * 0.18f, c.y - r * 1.30f), strokeWidth = 3.dp.toPx())
+        drawCircle(Color(0xFFFFF1A6), r * 0.055f, Offset(c.x, c.y - r * 1.45f))
     }
 }
 
