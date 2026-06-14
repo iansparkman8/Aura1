@@ -25,7 +25,7 @@ class NexisOverlayView(
         color = Color.WHITE
         textAlign = Paint.Align.CENTER
         textSize = 24f * resources.displayMetrics.scaledDensity
-        fakeBoldText = true
+        setFakeBoldText(true)
     }
     private var downRawX = 0f
     private var downRawY = 0f
